@@ -162,6 +162,18 @@ def calculate_area_between_temp(time, room_temperatures, set_temp):
         dt = time[i] - time[i - 1]
         area += abs(room_temperatures[i] - set_temp) * dt  # average_temp kullanımı kaldırıldı
     return area
+def calculate_area_metrics(time, room_temperatures, set_temp):
+    overshoot = 0
+    undershoot = 0
+    for i in range(1, len(time)):
+        dt = time[i] - time[i - 1]
+        avg_temp = (room_temperatures[i] + room_temperatures[i - 1]) / 2
+        if avg_temp > set_temp:
+            overshoot += (avg_temp - set_temp) * dt
+        elif avg_temp < set_temp:
+            undershoot += (set_temp - avg_temp) * dt
+    total_area = overshoot + undershoot
+    return overshoot, undershoot, total_area
 # --- Main App ---
 simulation_type = st.sidebar.multiselect("Choose Simulation Type(s):", ["On-Off", "Q-Learning", "PID"])
 
@@ -182,17 +194,41 @@ if st.sidebar.button("Run Simulation"):
         time_pid, room_temperatures_pid, area_pid = run_pid_simulation(initial_room_temperature, thermostat_sensitivity)
         st.write(f"**PID Control:** Area between current temperature and set temperature: {area_pid:.2f} °C*minutes")
         results["PID"] = {'time': time_pid, 'room_temperatures': room_temperatures_pid}
-
-    # --- Plotting Results ---
-    plt.figure(figsize=(12, 6))
+# --- Plotting Results ---
+    fig1, ax1 = plt.subplots(figsize=(12, 6))
 
     for algo, data in results.items():
-        plt.plot(data['time'], data['room_temperatures'], label=f"Room Temperature ({algo})")
+        ax1.plot(data['time'], data['room_temperatures'], label=f"Room Temperature ({algo})")
 
-    plt.axhline(y=thermostat_setting, color='r', linestyle='--', label="Thermostat Setting")
-    plt.xlabel("Time (Minutes)")
-    plt.ylabel("Temperature (°C)")
-    plt.legend()
-    plt.grid(True)
-    plt.title("Room Temperature Control Simulation")
-    st.pyplot(plt)
+    ax1.axhline(y=thermostat_setting, color='r', linestyle='--', label="Thermostat Setting")
+    ax1.set_xlabel("Time (Minutes)")
+    ax1.set_ylabel("Temperature (°C)")
+    ax1.legend()
+    ax1.grid(True)
+    ax1.set_title("Room Temperature Control Simulation")
+
+    st.pyplot(fig1)  # Ana grafiği göster
+
+    # Bar Chart for Comfort and Energy Metrics
+    fig2, ax2 = plt.subplots(figsize=(10, 4))  # Bar grafiği için yeni bir figure oluştur
+    metrics = {algo: calculate_area_metrics(data['time'], data['room_temperatures'], thermostat_setting) for algo, data in results.items()}
+    labels = list(metrics.keys())
+    overshoot_values = [m[0] for m in metrics.values()]
+    undershoot_values = [m[1] for m in metrics.values()]
+    total_values = [m[2] for m in metrics.values()]
+
+    width = 0.2
+    x = np.arange(len(labels))
+
+    ax2.bar(x - width, overshoot_values, width, label='Overshoot', color='skyblue')
+    ax2.bar(x, undershoot_values, width, label='Undershoot', color='lightcoral')
+    ax2.bar(x + width, total_values, width, label='Total', color='lightgreen')
+
+    ax2.set_ylabel('Area (°C*minutes)')
+    ax2.set_xticks(x)
+    ax2.set_xticklabels(labels)
+    ax2.legend(loc='upper right')
+    ax2.set_title("Comfort and Energy Consumption Metrics")
+
+    st.pyplot(fig2)  # Bar grafiğini göster
+
