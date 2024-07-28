@@ -1,2 +1,8 @@
 streamlit
 pandas
+streamlit
+matplotlib
+geneticalgorithm
+pip install matplotlib
+
+
