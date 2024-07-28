@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 
+
 # --- App Title and Description ---
 st.title("Thermostat Simulation: Comparing Control Algorithms")
 st.write("This interactive simulation compares On-Off, PID, and Q-Learning control algorithms for maintaining room temperature.")
@@ -28,6 +29,11 @@ st.sidebar.subheader("PID Parameters")
 Kp = st.sidebar.slider("Kp (Proportional Gain)", min_value=0.1, max_value=2.0, value=0.5)
 Ki = st.sidebar.slider("Ki (Integral Gain)", min_value=0.01, max_value=0.5, value=0.1)
 Kd = st.sidebar.slider("Kd (Derivative Gain)", min_value=0.001, max_value=0.2, value=0.01)
+
+# --- Global Variables ---
+num_states = 41
+num_actions = 2
+q_table = np.zeros((num_states, num_actions))  # Initialize q_table here
 
 # --- Helper Functions ---
 def get_state(temperature):
@@ -93,7 +99,7 @@ def run_q_learning_simulation(initial_room_temperature):
         room_temperature = initial_room_temperature
         state = get_state(room_temperature)
         for _ in np.arange(0, simulation_minutes, 0.1):
-            action = get_action(state)
+            action = get_action(state, q_table, exploration_rate)
             if action == 1:
                 room_temperature += heater_power * 0.1
             else:
@@ -168,7 +174,7 @@ def run_pid_simulation(initial_room_temperature):
 
     return time, room_temperatures, heater_output, df
 
-# Calculate Area Between Current Temperature and Set Temperature ---
+# --- Calculate Area Between Current Temperature and Set Temperature ---
 def calculate_area_between_temp(time, room_temperatures, set_temp):
     area = 0
     for i in range(1, len(time)):
@@ -245,4 +251,3 @@ if st.sidebar.button("Run Simulation"):
     for algo, data in results.items():
         st.write(f"**{algo} Control:**")
         st.dataframe(data['df'])
-
