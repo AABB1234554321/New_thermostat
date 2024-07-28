@@ -3,7 +3,6 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 
-
 # --- App Title and Description ---
 st.title("Thermostat Simulation: Comparing Control Algorithms")
 st.write("This interactive simulation compares On-Off, PID, and Q-Learning control algorithms for maintaining room temperature.")
@@ -16,6 +15,7 @@ thermostat_setting = st.sidebar.number_input("Thermostat Setting (°C)", min_val
 heater_power = st.sidebar.slider("Heater Power (°C/minute)", min_value=0.1, max_value=0.5, value=0.3)
 heat_loss = st.sidebar.slider("Heat Loss (°C/minute)", min_value=0.05, max_value=0.2, value=0.1)
 simulation_minutes = st.sidebar.number_input("Simulation Minutes", min_value=10, max_value=120, value=60)
+thermostat_sensitivity = st.sidebar.slider("Thermostat Sensitivity (°C)", min_value=0.1, max_value=0.5, value=0.5, step=0.1)
 
 # --- Q-Learning Parameters ---
 st.sidebar.subheader("Q-Learning Parameters")
@@ -60,22 +60,19 @@ def get_reward(state, action, thermostat_setting):
         return -1  # Slight penalty for not being in range
 
 # --- Simulation Logic (On-Off) ---
-def run_on_off_simulation(initial_room_temperature):
+def run_on_off_simulation(initial_room_temperature, thermostat_sensitivity):
     time = []
     room_temperatures = []
-    heater_output = []
     room_temperature = initial_room_temperature
     heater_status = False
 
     for minute in np.arange(0, simulation_minutes, 0.1):
         time.append(minute)
 
-        if room_temperature < thermostat_setting - 0.5:
+        if room_temperature < thermostat_setting - thermostat_sensitivity:
             heater_status = True
-        elif room_temperature > thermostat_setting + 0.5:
+        elif room_temperature > thermostat_setting + thermostat_sensitivity:
             heater_status = False
-
-        heater_output.append(1 if heater_status else 0)
 
         if heater_status:
             room_temperature += heater_power * 0.1
@@ -84,16 +81,11 @@ def run_on_off_simulation(initial_room_temperature):
 
         room_temperatures.append(room_temperature)
 
-    df = pd.DataFrame({
-        'Time (Minutes)': time,
-        'Room Temperature (°C)': room_temperatures,
-        'Heater Output': heater_output
-    })
-
-    return time, room_temperatures, heater_output, df
+    area_on_off = calculate_area_between_temp(time, room_temperatures, thermostat_setting)
+    return time, room_temperatures, area_on_off  # Return area_on_off
 
 # --- Simulation Logic (Q-Learning) ---
-def run_q_learning_simulation(initial_room_temperature):
+def run_q_learning_simulation(initial_room_temperature, thermostat_sensitivity):
     global q_table  # Ensure we're using the global q_table
     for episode in range(episodes):
         room_temperature = initial_room_temperature
@@ -114,13 +106,11 @@ def run_q_learning_simulation(initial_room_temperature):
     # Run one final simulation using the learned Q-table
     time = []
     room_temperatures = []
-    heater_output = []
 
     room_temperature = initial_room_temperature
     state = get_state(room_temperature)
     for minute in np.arange(0, simulation_minutes, 0.1):
         action = np.argmax(q_table[state, :])  # Always choose the best action
-        heater_output.append(action)
 
         if action == 1:
             room_temperature += heater_power * 0.1
@@ -131,16 +121,11 @@ def run_q_learning_simulation(initial_room_temperature):
         time.append(minute)
         room_temperatures.append(room_temperature)
 
-    df = pd.DataFrame({
-        'Time (Minutes)': time,
-        'Room Temperature (°C)': room_temperatures,
-        'Heater Output': heater_output
-    })
-
-    return time, room_temperatures, heater_output, df
+    area_q = calculate_area_between_temp(time, room_temperatures, thermostat_setting)
+    return time, room_temperatures, area_q  # Return area_q
 
 # --- Simulation Logic (PID) ---
-def run_pid_simulation(initial_room_temperature):
+def run_pid_simulation(initial_room_temperature, thermostat_sensitivity):
     time = []
     room_temperatures = []
     heater_output = []
@@ -166,88 +151,48 @@ def run_pid_simulation(initial_room_temperature):
         room_temperature += (heater_power * heater_output_percent - heat_loss) * 0.1
         room_temperatures.append(room_temperature)
 
-    df = pd.DataFrame({
-        'Time (Minutes)': time,
-        'Room Temperature (°C)': room_temperatures,
-        'Heater Output (%)': heater_output
-    })
-
-    return time, room_temperatures, heater_output, df
+    area_pid = calculate_area_between_temp(time, room_temperatures, thermostat_setting)
+    return time, room_temperatures, area_pid  # Return area_pid
 
 # --- Calculate Area Between Current Temperature and Set Temperature ---
+
 def calculate_area_between_temp(time, room_temperatures, set_temp):
     area = 0
     for i in range(1, len(time)):
         dt = time[i] - time[i - 1]
-        avg_temp = (room_temperatures[i] + room_temperatures[i - 1]) / 2
-        area += abs(avg_temp - set_temp) * dt
+        area += abs(room_temperatures[i] - set_temp) * dt  # average_temp kullanımı kaldırıldı
     return area
-
 # --- Main App ---
 simulation_type = st.sidebar.multiselect("Choose Simulation Type(s):", ["On-Off", "Q-Learning", "PID"])
 
 if st.sidebar.button("Run Simulation"):
-    results = {}  # Store simulation results in a dictionary
+    results = {}
 
     if "On-Off" in simulation_type:
-        time_on_off, room_temperatures_on_off, heater_output_on_off, df_on_off = run_on_off_simulation(initial_room_temperature)
-        area_on_off = calculate_area_between_temp(time_on_off, room_temperatures_on_off, thermostat_setting)
+        time_on_off, room_temperatures_on_off, area_on_off = run_on_off_simulation(initial_room_temperature, thermostat_sensitivity)
         st.write(f"**On-Off Control:** Area between current temperature and set temperature: {area_on_off:.2f} °C*minutes")
-        results["On-Off"] = {
-            'time': time_on_off,
-            'room_temperatures': room_temperatures_on_off,
-            'heater_output': heater_output_on_off,
-            'df': df_on_off
-        }
+        results["On-Off"] = {'time': time_on_off, 'room_temperatures': room_temperatures_on_off}
 
     if "Q-Learning" in simulation_type:
-        time_q, room_temperatures_q, heater_output_q, df_q = run_q_learning_simulation(initial_room_temperature)
-        area_q = calculate_area_between_temp(time_q, room_temperatures_q, thermostat_setting)
+        time_q, room_temperatures_q, area_q = run_q_learning_simulation(initial_room_temperature, thermostat_sensitivity)
         st.write(f"**Q-Learning:** Area between current temperature and set temperature: {area_q:.2f} °C*minutes")
-        results["Q-Learning"] = {
-            'time': time_q,
-            'room_temperatures': room_temperatures_q,
-            'heater_output': heater_output_q,
-            'df': df_q
-        }
+        results["Q-Learning"] = {'time': time_q, 'room_temperatures': room_temperatures_q}
 
     if "PID" in simulation_type:
-        time_pid, room_temperatures_pid, heater_output_pid, df_pid = run_pid_simulation(initial_room_temperature)
-        area_pid = calculate_area_between_temp(time_pid, room_temperatures_pid, thermostat_setting)
+        time_pid, room_temperatures_pid, area_pid = run_pid_simulation(initial_room_temperature, thermostat_sensitivity)
         st.write(f"**PID Control:** Area between current temperature and set temperature: {area_pid:.2f} °C*minutes")
-        results["PID"] = {
-            'time': time_pid,
-            'room_temperatures': room_temperatures_pid,
-            'heater_output': heater_output_pid,
-            'df': df_pid
-        }
+        results["PID"] = {'time': time_pid, 'room_temperatures': room_temperatures_pid}
 
     # --- Plotting Results ---
     plt.figure(figsize=(12, 6))
 
     for algo, data in results.items():
-        plt.plot(data['time'], data['room_temperatures'], label=f"Room Temperature ({algo})", linestyle="-")
-        if algo != "On-Off":  # Only plot heater output for Q-Learning and PID
-            plt.plot(data['time'], data['heater_output'], label=f"Heater Output ({algo})", linestyle="--")
-
-    # Adjust y-axis limits based on available data
-    min_temp = min([min(data['room_temperatures']) for data in results.values()]) - 1
-    max_temp = max([max(data['room_temperatures']) for data in results.values()]) + 1
+        plt.plot(data['time'], data['room_temperatures'], label=f"Room Temperature ({algo})")
 
     plt.axhline(y=thermostat_setting, color='r', linestyle='--', label="Thermostat Setting")
-    plt.axhline(y=thermostat_setting + 0.5, color='g', linestyle='--', alpha=0.3, label="Acceptable Range")
-    plt.axhline(y=thermostat_setting - 0.5, color='g', linestyle='--', alpha=0.3)
-    plt.ylim(min_temp, max_temp)
-
     plt.xlabel("Time (Minutes)")
     plt.ylabel("Temperature (°C)")
     plt.legend()
     plt.grid(True)
     plt.title("Room Temperature Control Simulation")
     st.pyplot(plt)
-
-    # Display results in a table
-    st.subheader("Detailed Results")
-    for algo, data in results.items():
-        st.write(f"**{algo} Control:**")
-        st.dataframe(data['df'])
