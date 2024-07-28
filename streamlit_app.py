@@ -176,25 +176,37 @@ def calculate_area_metrics(time, room_temperatures, set_temp):
     return overshoot, undershoot, total_area
 # --- Main App ---
 simulation_type = st.sidebar.multiselect("Choose Simulation Type(s):", ["On-Off", "Q-Learning", "PID"])
-
 if st.sidebar.button("Run Simulation"):
     results = {}
 
     if "On-Off" in simulation_type:
         time_on_off, room_temperatures_on_off, area_on_off = run_on_off_simulation(initial_room_temperature, thermostat_sensitivity)
         st.write(f"**On-Off Control:** Area between current temperature and set temperature: {area_on_off:.2f} °C*minutes")
-        results["On-Off"] = {'time': time_on_off, 'room_temperatures': room_temperatures_on_off}
+        df_on_off = pd.DataFrame({
+            'Time (Minutes)': time_on_off,
+            'Room Temperature (°C)': room_temperatures_on_off
+        })
+        results["On-Off"] = {'time': time_on_off, 'room_temperatures': room_temperatures_on_off, 'df': df_on_off}
 
     if "Q-Learning" in simulation_type:
         time_q, room_temperatures_q, area_q = run_q_learning_simulation(initial_room_temperature, thermostat_sensitivity)
         st.write(f"**Q-Learning:** Area between current temperature and set temperature: {area_q:.2f} °C*minutes")
-        results["Q-Learning"] = {'time': time_q, 'room_temperatures': room_temperatures_q}
+        df_q = pd.DataFrame({
+            'Time (Minutes)': time_q,
+            'Room Temperature (°C)': room_temperatures_q
+        })
+        results["Q-Learning"] = {'time': time_q, 'room_temperatures': room_temperatures_q, 'df': df_q}
 
     if "PID" in simulation_type:
         time_pid, room_temperatures_pid, area_pid = run_pid_simulation(initial_room_temperature, thermostat_sensitivity)
         st.write(f"**PID Control:** Area between current temperature and set temperature: {area_pid:.2f} °C*minutes")
-        results["PID"] = {'time': time_pid, 'room_temperatures': room_temperatures_pid}
-# --- Plotting Results ---
+        df_pid = pd.DataFrame({
+            'Time (Minutes)': time_pid,
+            'Room Temperature (°C)': room_temperatures_pid
+        })
+        results["PID"] = {'time': time_pid, 'room_temperatures': room_temperatures_pid, 'df': df_pid}
+
+    # --- Plotting Results ---
     fig1, ax1 = plt.subplots(figsize=(12, 6))
 
     for algo, data in results.items():
@@ -232,3 +244,17 @@ if st.sidebar.button("Run Simulation"):
 
     st.pyplot(fig2)  # Bar grafiğini göster
 
+    # Açıklamayı bar grafiğinin altına ekle
+    st.write("Overshoot = Gereksiz enerji tüketimi + Konforsuzluk")
+    st.write("Undershoot = Konforsuzluk")
+
+    # Display Tables
+    st.subheader("Detailed Results")
+    
+    # Tabloları yan yana göstermek için sütunlar oluştur
+    col1, col2, col3 = st.columns(3)
+
+    for algo, data in results.items():
+        with col1 if algo == "On-Off" else col2 if algo == "Q-Learning" else col3:
+            st.write(f"**{algo} Control:**")
+            st.dataframe(data['df'].style.hide(axis='index'))  # Tabloyu indexsiz göster
